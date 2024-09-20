@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         JVC_ImageViewer
+// @name         DEBUGJVC_ImageViewer
 // @namespace    http://tampermonkey.net/
 // @version      1.38.4
 // @description  Naviguer entre les images d'un post sous forme de slideshow en cliquant sur une image sans ouvrir NoelShack.
@@ -328,6 +328,7 @@
         handleSwipeStart(event) {
             if (event.touches.length === 1) {
                 if(this.isPinchZooming) return;
+                console.log("handleSwipeStart");
                 // Commencer le swipe
                 this.isSwiping = true;
                 this.startX = event.touches[0].clientX;
@@ -338,6 +339,7 @@
         // Gestion du mouvement tactile pour swipe
         handleSwipeMove(event) {
             if (this.isSwiping && event.touches.length === 1) {
+                console.log("handleSwipeMove");
                 this.currentX = event.touches[0].clientX;
                 this.currentY = event.touches[0].clientY;
             }
@@ -349,6 +351,7 @@
               this.initialDistance = null;
             }
             if (this.isSwiping) {
+              console.log("handleSwipeEnd");
               this.isSwiping = false;
               const deltaX = this.currentX - this.startX;
               const deltaY = this.currentY - this.startY;
