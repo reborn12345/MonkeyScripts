@@ -1,16 +1,19 @@
 // ==UserScript==
-// @name         DEBUGJVC_ImageViewer
+// @name         JVC_ImageViewer
 // @namespace    http://tampermonkey.net/
-// @version      1.38.4
+// @version      1.41.10
 // @description  Naviguer entre les images d'un post sous forme de slideshow en cliquant sur une image sans ouvrir NoelShack.
 // @author       HulkDu92
 // @match        https://*.jeuxvideo.com/forums/*
-// @match        https://jvarchive.com/forums/*
-// @grant        none
+// @match        https://*.jeuxvideo.com/profil/*
+// @match        https://*.jeuxvideo.com/messages-prives/*
+// @match        https://jvarchive.com/*
+// @grant        GM_download
+// @grant        GM.xmlHttpRequest
+// @connect      image.noelshack.com
 // @run-at       document-end
 // @license      MIT
-// @downloadURL https://update.greasyfork.org/scripts/508447/JVC_ImageViewer.user.js
-// @updateURL https://update.greasyfork.org/scripts/508447/JVC_ImageViewer.meta.js
+// @icon         https://image.noelshack.com/fichiers/2024/41/3/1728506420-image-viewer-icon.png
 // ==/UserScript==
 
 (function() {
@@ -31,6 +34,7 @@
             this.nextButton = null;
             this.closeButton = null;
             this.infoText = null;
+            this.downloadButton = null;
             this.indicatorsContainer = null;
             this.indicators = [];
             this.zoomLevel = 1;
@@ -48,14 +52,22 @@
             this.isScaling = false;
             this.imageElementScale = 1;
             this.start = {};
-            this.isMouseDown = false; // Suivi de l'état du clic
-            this.isTouchDragging = false; // Suivi de l'état de la pression
+            this.isMouseDown = false;
+            this.isTouchDragging = false;
             this.dragTimeout = null;
             this.mouseDownX = 0;
             this.mouseDownY = 0;
             this.initialScale = 1;
+            this.isViewerOpen = false;
+            this.thumbnailPanel = null;
+            this.previousThumbnail = null;
+            this.touchSensitivityFactor = 0.5; // Pour les appareils tactiles
+            this.mouseSensitivityFactor = 0.4; // Pour les mouvements de souris
+            this.defaultImageWidth = Math.min(window.innerWidth, 1200);
 
             ImageViewer.instance = this;
+
+            this.handlePopState = this.handlePopState.bind(this);
 
             this.createOverlay();
             this.updateImage();
@@ -82,14 +94,15 @@
                 objectFit: 'contain',
                 transition: 'opacity 0.3s',
                 opacity: 0,
-                cursor: 'pointer'
+                cursor: 'pointer',
             });
 
             this.spinner = this.createSpinner();
-            this.prevButton = this.createButton('<', 'left');
-            this.nextButton = this.createButton('>', 'right');
+            this.prevButton =  this.createButton('<', 'left');
+            this.nextButton =  this.createButton('>', 'right');
             this.closeButton = this.createCloseButton();
             this.infoText = this.createInfoText();
+            this.downloadButton = this.createDownloadButton();
 
             this.indicatorsContainer = this.createElement('div', {
                 display: 'flex',
@@ -99,12 +112,24 @@
                 bottom: '40px',
             });
 
+            // this.addScrollbarStyles();
+            this.resetHideButtons();
 
             // Événements associés aux boutons et à l'overlay
             this.addEventListeners();
+            this.addInteractionListeners();
 
             // Ajout des éléments au DOM
-            this.overlay.append(this.imgElement, this.spinner, this.prevButton, this.nextButton, this.closeButton,  this.indicatorsContainer, this.infoText);
+            //this.overlay.append(this.imgElement, this.spinner, this.infoText, this.prevButton, this.nextButton, this.closeButton);
+            this.overlay.append(
+                this.imgElement,
+                this.spinner,
+                this.infoText,
+                this.downloadButton,  // Ajout du bouton de téléchargement
+                this.prevButton,
+                this.nextButton,
+                this.closeButton
+            );
             document.body.appendChild(this.overlay);
         }
 
@@ -139,11 +164,74 @@
           });
 
 
-          button.textContent = text;
+          //button.textContent = text;*
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('width', '24');
+          svg.setAttribute('height', '24');
+          svg.setAttribute('fill', 'white');
+
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', position === 'left'
+              ? 'M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z' // Icône flèche gauche
+              : 'M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z');  // Icône flèche droite
+          svg.appendChild(path);
+          button.appendChild(svg);
+
           this.addButtonEffects(button);
 
           return button;
       }
+
+      createDownloadButton() {
+          const isMobileDevice = isMobile();
+
+          const button = this.createElement('button', {
+              position: 'absolute',
+              top: '120px',
+              left: '15px',
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              color: 'white',
+              fontSize: isMobileDevice ? '12px' : '10px',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '50%',
+              padding: '0',
+              cursor: 'pointer',
+              zIndex: 10001,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: isMobileDevice ? '37px' : '45px',
+              height: isMobileDevice ? '37px' : '45px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+              transition: 'transform 0.3s ease, background-color 0.3s ease',
+          });
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('width', isMobileDevice ? '22' : '26');
+            svg.setAttribute('height', isMobileDevice ? '22' : '26');
+            svg.setAttribute('fill', 'white');
+
+            // Nouvelle flèche épurée vers le bas
+            const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            arrowPath.setAttribute('d', 'M12 16l-4-4h3V4h2v8h3l-4 4z');
+            svg.appendChild(arrowPath);
+
+            // Barre horizontale plus discrète représentant le disque dur
+            const diskPath = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            diskPath.setAttribute('x', '8');
+            diskPath.setAttribute('y', '18');
+            diskPath.setAttribute('width', '8');
+            diskPath.setAttribute('height', '2');
+            svg.appendChild(diskPath);
+
+            button.appendChild(svg);
+            this.addButtonEffects(button);
+
+            return button;
+      }
+
 
         // Crée le bouton de fermeture
         createCloseButton() {
@@ -155,13 +243,14 @@
                 right: '10px',
                 backgroundColor: 'rgba(0, 0, 0, 0.8)',
                 color: 'white',
-                fontSize: isMobileDevice ? '18px' : '14px',//'14px',
-                border: 'none',
+                fontSize: isMobileDevice ? '18px' : '16px',
+                //border: 'none',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
                 borderRadius: '50%',
-                width: isMobileDevice ? '40px' : '35px', //'35px',
-                height: isMobileDevice ? '40px' : '35px', //'35px',
+                width: isMobileDevice ? '40px' : '35px',
+                height: isMobileDevice ? '40px' : '35px',
                 cursor: 'pointer',
-                zIndex: 10001
+                zIndex: 99999999
             });
 
            button.textContent = '✕';
@@ -174,11 +263,11 @@
         createInfoText() {
             return this.createElement('div', {
                 position: 'absolute',
-                bottom: '10px',
-                right: '10px',
+                top: '80px',
+                left: '15px',
                 color: 'white',
-                fontSize: '16px',
-                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                fontSize: '12px',
+                backgroundColor: 'rgba(5, 5, 5, 0.5)',
                 padding: '5px',
                 borderRadius: '5px',
                 zIndex: 10001
@@ -199,6 +288,7 @@
             });
             return spinner;
         }
+
 
         addButtonEffects(button) {
             button.addEventListener('mouseenter', () => {
@@ -228,6 +318,7 @@
             this.prevButton.addEventListener('click', () => this.changeImage(-1));
             this.nextButton.addEventListener('click', () => this.changeImage(1));
             this.closeButton.addEventListener('click', () => this.closeViewer());
+            this.downloadButton.addEventListener('click', () => this.startDownload());
             this.overlay.addEventListener('click', (event) => {
                 if (event.target === this.overlay) {
                     this.closeViewer();
@@ -244,14 +335,9 @@
             this.imgElement.addEventListener('mouseup', this.handleMouseUp.bind(this));
 
             // Touches avec les doigts
-            this.overlay.addEventListener('touchstart', (event) => this.handleTouchEvent(event));
-            this.overlay.addEventListener('touchmove', (event) => this.handleTouchEvent(event));
-            this.overlay.addEventListener('touchend', (event) => this.handleTouchEvent(event));
-
-             // Zoom sur mobile
-            //this.overlay.addEventListener('touchstart', (event) => this.handlePinchStart(event));
-            //this.overlay.addEventListener('touchmove', (event) => this.handlePinchMove(event));
-            //this.overlay.addEventListener('touchend', (event) => this.handlePinchEnd(event));
+            this.imgElement.addEventListener('touchstart', (event) => this.handleTouchEvent(event));
+            this.imgElement.addEventListener('touchmove', (event) => this.handleTouchEvent(event));
+            this.imgElement.addEventListener('touchend', (event) => this.handleTouchEvent(event));
 
             // Ouvrir l'image dans une no6velle fenêtre
             this.imgElement.addEventListener('click', () => {
@@ -264,7 +350,7 @@
             document.addEventListener('keydown', (event) => this.handleKeyboardEvents(event));
         }
 
-        // Fonction pour gérer les touches du clavier
+        // Fonctions pour gérer les touches du clavier
         handleKeyboardEvents(event) {
             switch (event.key) {
                 case 'ArrowLeft':
@@ -275,49 +361,61 @@
                 case 'ArrowDown':
                     this.changeImage(1);
                     break;
-                case 'Escape':
-              case 'Backspace':
+              case 'Escape':
                     event.preventDefault();
                     this.closeViewer();
                     break;
             }
         }
 
-        //
+        // Fonctions pour gérer les touches tactiles
         handleTouchEvent(event) {
-            // Glissement sur mobile (swipe) -> event.touches.length === 1
-            // Zoom sur mobile -> event.touches.length === 2
           switch (event.type) {
               case 'touchstart':
                   if (event.touches.length === 1) {
-                        /*if (this.imageElementScale > 1) {
-                            // Si l'image est zoomée, permettre le déplacement (drag)
-                            this.startDrag(event);
-                        } else {*/
-                            // Sinon, démarrer le swipe
-                            this.handleSwipeStart(event);
-                        //}
-                  }
-                  else if (event.touches.length === 2) {
+                      if (this.imageElementScale > 1) {
+                          // Si l'image est zoomée, permettre le déplacement (drag)
+                          this.startDrag(event);
+                      } else {
+                          // Sinon, démarrer le swipe
+                          console.log("swipe start");
+                          this.handleSwipeStart(event);
+                      }
+                  } else if (event.touches.length === 2) {
+                      // Démarrer le pinch zoom
                       this.handlePinchStart(event);
                   }
                   break;
 
               case 'touchmove':
                   if (event.touches.length === 1) {
-                    this.handleSwipeMove(event);
-                  }
-                  else if (event.touches.length === 2) {
-                    this.handlePinchMove(event);
+                      if (this.imageElementScale > 1) {
+                          // Si l'image est zoomée, permettre le déplacement (drag)
+                          this.onDrag(event);
+                      } else {
+                          console.log("swipe move");
+                          this.handleSwipeMove(event);
+                      }
+                  } else if (event.touches.length === 2) {
+                      // Gérer le pinch zoom
+                      this.handlePinchMove(event);
                   }
                   break;
 
               case 'touchend':
                   if (event.touches.length === 1) {
-                    this.handleSwipeEnd(event);
+                      if (this.imageElementScale > 1) {
+                          this.endDrag(event);
+                      }
                   }
-                  else if (event.touches.length === 2) {
-                    this.handlePinchEnd(event);
+                  else if (event.touches.length === 0) {
+                      if (this.isSwiping) {
+                        this.handleSwipeEnd(event);
+                      } else if (this.isPinchZooming) {
+                        this.handlePinchEnd(event);
+                      } else {
+                        this.endDrag(event);
+                      }
                   }
                   break;
           }
@@ -327,8 +425,9 @@
         // Gestion du début de l'interaction tactile
         handleSwipeStart(event) {
             if (event.touches.length === 1) {
-                if(this.isPinchZooming) return;
-                console.log("handleSwipeStart");
+                if(this.isPinchZooming) {
+                  return;
+                }
                 // Commencer le swipe
                 this.isSwiping = true;
                 this.startX = event.touches[0].clientX;
@@ -339,7 +438,6 @@
         // Gestion du mouvement tactile pour swipe
         handleSwipeMove(event) {
             if (this.isSwiping && event.touches.length === 1) {
-                console.log("handleSwipeMove");
                 this.currentX = event.touches[0].clientX;
                 this.currentY = event.touches[0].clientY;
             }
@@ -347,11 +445,10 @@
 
         // Gestion de la fin de l'interaction tactile
         handleSwipeEnd(event) {
-            if (event.touches.length < 2) {
+            if (event.touches.length === 0) {
               this.initialDistance = null;
             }
             if (this.isSwiping) {
-              console.log("handleSwipeEnd");
               this.isSwiping = false;
               const deltaX = this.currentX - this.startX;
               const deltaY = this.currentY - this.startY;
@@ -370,6 +467,9 @@
                   this.closeViewer();
               }
           }
+
+          //  l'image revient à sa taille d'origine, réinitialiser le zIndex
+          this.imgElement.style.zIndex = '';
         }
 
         // Calculate distance between two fingers
@@ -405,7 +505,7 @@
                   scale = event.scale;
                 } else {
                   const deltaDistance = this.distance(event);
-                  scale = deltaDistance / this.start.distance;
+                  scale = (deltaDistance / this.start.distance); //* this.touchSensitivityFactor;
                 }
                 // this.imageElementScale = Math.min(Math.max(1, scale), 4);
                 // Multiply the new scale by the starting scale to retain the zoom level
@@ -422,6 +522,7 @@
                 this.imgElement.style.transform = transform;
                 this.imgElement.style.WebkitTransform = transform;
                 this.imgElement.style.zIndex = "9999";
+                this.closeButton.style.zIndex = "10003";
             }
         }
 
@@ -438,10 +539,6 @@
               if (this.imageElementScale <= 1) {
                   this.imgElement.style.zIndex = '';
               }
-              else  {
-                  this.imgElement.style.zIndex = 10002;
-              }
-
             }
         }
 
@@ -455,15 +552,20 @@
 
         handleZoom(event) {
             event.preventDefault();
-            const zoomIncrement = 0.1;
+            const zoomIncrement = 0.07;
 
-            if (event.deltaY < 0) {
-                this.zoomLevel += zoomIncrement; // Zoomer
+            /*if (event.deltaY < 0) {
+                this.imageElementScale += zoomIncrement; // Zoomer
             } else {
-                this.zoomLevel = Math.max(1, this.zoomLevel - zoomIncrement); // Dézoomer, mais ne pas descendre sous 1
+                this.imageElementScale = Math.max(1, this.zoomLevel - zoomIncrement); // Dézoomer, mais ne pas descendre sous 1
+            }*/
+            if (event.deltaY < 0) {
+                this.imageElementScale = Math.min(4, this.imageElementScale + zoomIncrement); // Limite max
+            } else {
+                this.imageElementScale = Math.max(1, this.imageElementScale - zoomIncrement); // Limite min
             }
 
-            this.imgElement.style.transform = `scale(${this.zoomLevel}) translate(${this.offsetX}px, ${this.offsetY}px)`;
+            this.imgElement.style.transform = `scale(${this.imageElementScale}) translate(${this.offsetX}px, ${this.offsetY}px)`;
 
             // Si le niveau de zoom est supérieur à 1, mettre l'image devant les boutons
             if (this.zoomLevel > 1) {
@@ -479,54 +581,75 @@
             event.preventDefault(); // Empêche la sélection de l'image
 
             // Gestion tactile
-            /*if (event.type === 'touchstart') {
+            if (event.type === 'touchstart') {
                 this.isTouchDragging = true;
-            }*/
-
-            // if (!this.isMouseDown && !this.isTouchDragging) return; // Ne pas démarrer si ni la souris ni le toucher n'est actif
-            if (!this.isMouseDown) return;
+                this.startX = event.touches[0].clientX; //- this.offsetX;
+                this.startY = event.touches[0].clientY; //- this.offsetY;
+            } else {
+                // Gestion avec la souris
+                this.isMouseDown = true;
+                this.startX = event.clientX; //- this.offsetX;
+                this.startY = event.clientY; // - this.offsetY;
+            }
 
             this.isDragging = true;
-            this.startX = event.clientX - this.offsetX;
-            this.startY = event.clientY - this.offsetY;
             this.imgElement.style.cursor = 'grabbing';
             this.imgElement.style.userSelect = 'none';
 
-            // Ajouter des listeners sur le document pour capturer les mouvements même si on sort de l'image
-            /*if (event.touches) {
+            // Ajouter des listeners sur le document pour capturer les mouvements
+            if (event.touches) {
                 document.addEventListener('touchmove', this.onDragBound = this.onDrag.bind(this));
                 document.addEventListener('touchend', this.endDragBound = this.endDrag.bind(this));
-            } else {*/
+            } else {
                 document.addEventListener('mousemove', this.onDragBound = this.onDrag.bind(this));
                 document.addEventListener('mouseup', this.endDragBound = this.endDrag.bind(this));
-            //}
+            }
         }
+
 
         onDrag(event) {
             if (!this.isDragging) return;
 
             event.preventDefault();
 
-            this.offsetX = event.clientX - this.startX;
-            this.offsetY = event.clientY - this.startY;
+            let deltaX, deltaY;
+
+            if (event.type === 'touchmove') {
+                // Gestion tactile
+                deltaX = (event.touches[0].clientX - this.startX) * this.touchSensitivityFactor;
+                deltaY = (event.touches[0].clientY - this.startY) * this.touchSensitivityFactor;
+            } else {
+                // Gestion avec la souris
+                deltaX = (event.clientX - this.startX) * this.mouseSensitivityFactor;
+                deltaY = (event.clientY - this.startY) * this.mouseSensitivityFactor;
+            }
+
+            // Appliquer la translation ajustée par le facteur de sensibilité
+            this.offsetX += deltaX;
+            this.offsetY += deltaY;
+
+              // Mettre à jour les points de départ pour le prochain déplacement
+            this.startX = event.type === 'touchmove' ? event.touches[0].clientX : event.clientX;
+            this.startY = event.type === 'touchmove' ? event.touches[0].clientY : event.clientY;
 
             // Appliquer la transformation avec le zoom actuel, en se déplaçant dans l'image
-            this.imgElement.style.transform = `scale(${this.zoomLevel}) translate(${this.offsetX}px, ${this.offsetY}px)`;
+            this.imgElement.style.transform =  `scale(${this.imageElementScale}) translate(${this.offsetX}px, ${this.offsetY}px)`;
         }
 
-        endDrag() {
+
+        endDrag(event) {
             this.imgElement.style.cursor = 'grab';
 
             // Retirer les listeners
-            /*if (event.type === 'touchend') {
+            if (event.type === 'touchend') {
                 this.isTouchDragging = false; // Réinitialise l'état tactile
                 document.removeEventListener('touchmove', this.onDragBound);
                 document.removeEventListener('touchend', this.endDragBound);
-            } else {*/
+            } else {
                 this.isMouseDown = false; // Réinitialise l'état de la souris
                 document.removeEventListener('mousemove', this.onDragBound);
                 document.removeEventListener('mouseup', this.endDragBound);
-            //}
+            }
 
             // Ajouter un délai pour réinitialiser le drag (empeche les conflits avec le clic)
             this.dragTimeout = setTimeout(() => {
@@ -535,6 +658,7 @@
                 this.dragTimeout = null;
             }, 100);
         }
+
 
         handleMouseDown(event) {
             this.isMouseDown = true;
@@ -571,6 +695,9 @@
         resetZoom() {
             this.imgElement.style.transform = 'scale(1)';
             this.imgElement.style.transformOrigin = '0 0';
+            this.imageElementScale = 1;
+            this.offsetX = 0;
+            this.offsetY = 0;
         }
 
         // Réinitialiser la position du drag de l'image
@@ -583,6 +710,7 @@
         updateImage() {
             if (this.currentIndex >= 0 && this.currentIndex < this.images.length) {
               const imageUrl = this.images[this.currentIndex].href;
+
               this.imgElement.src = imageUrl;
               this.infoText.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
               this.spinner.style.display = 'block';
@@ -597,24 +725,32 @@
                   this.resetZoom();
                   this.resetDrag();
 
-
                   // Calcul de la position des boutons
                   const imgRect = this.imgElement.getBoundingClientRect();
                   const isMobileDevice = isMobile(); // Détection des mobiles
+
+                  if (imgRect.width > this.defaultImageWidth) {
+                      this.defaultImageWidth = imgRect.width;
+                  }
 
                   if (isMobileDevice) {
                     // pass
                   } else {
                       const margin = 30;
-                      this.prevButton.style.left = `${imgRect.left - this.prevButton.offsetWidth - margin}px`;
-                      this.nextButton.style.right = `${window.innerWidth - imgRect.right - this.nextButton.offsetWidth - margin}px`;
-                      //this.closeButton.style.right = `${window.innerWidth - imgRect.right - this.closeButton.offsetWidth - margin}px`;
-                      //this.closeButton.style.top = `${imgRect.top + margin}px`;
+                       // Calcul de la position des boutons
+                      let prevButtonLeft = (window.innerWidth - this.defaultImageWidth) / 2 - this.prevButton.offsetWidth - margin;
+                      let nextButtonRight = (window.innerWidth - this.defaultImageWidth) / 2 - this.nextButton.offsetWidth - margin;
+
+                      // Limite les boutons pour qu'ils ne sortent pas de l'écran à gauche ou à droite
+                      prevButtonLeft = Math.max(prevButtonLeft, margin); // Empêche de sortir à gauche
+                      nextButtonRight = Math.max(nextButtonRight, margin); // Empêche de sortir à droite
+
+                      // Appliquer les positions ajustées
+                      this.prevButton.style.left = `${prevButtonLeft}px`;
+                      this.nextButton.style.right = `${nextButtonRight}px`;
                   }
 
-                  // Mettre à jour les indicateurs
-                  // this.createIndicators();
-
+                  this.focusOnThumbnail();
               };
 
               this.imgElement.onerror = () => this.handleImageError();
@@ -624,26 +760,57 @@
         // Gestion des erreurs de chargement d'image
         handleImageError() {
             const miniUrl = this.images[this.currentIndex].querySelector('img').src;
-            const extensions = ['.jpg', '.png', '.jpeg'];
+            const fullUrl = this.images[this.currentIndex].href;
+            const extensions = this.reorderExtensions(fullUrl);
             const baseUrl = miniUrl.replace('/minis/', '/fichiers/');
 
             const tryNextExtension = (index) => {
                 if (index >= extensions.length) {
-                    // Si toutes les extensions échouent, tenter l'URL originale
+                    // Si toutes les extensions échouent, tenter l'URL originale (mini)
                     this.imgElement.src = miniUrl;
                     return;
                 }
 
                 // Remplacer l'extension et mettre à jour l'URL
                 const updatedUrl = baseUrl.replace(/\.(jpg|png|jpeg)$/, extensions[index]);
-                this.imgElement.src = updatedUrl;
 
-                // Tester l'URL
-                this.imgElement.onerror = () => tryNextExtension(index + 1);
+                // Tester l'URL avec un élément Image temporaire
+                const imgTest = new Image();
+                imgTest.src = updatedUrl;
+
+                imgTest.onload = () => {
+                    // Si l'image se charge avec succès, l'assigner à l'élément d'image principal
+                    this.imgElement.src = updatedUrl;
+                };
+
+                imgTest.onerror = () => {
+                    // console.log("Error loading: " + updatedUrl);
+                    tryNextExtension(index + 1);
+                };
             };
 
             // Commencer les essais avec la première extension
             tryNextExtension(0);
+        }
+
+        // Réarranger la liste des extensions a tester pour mettre l'extension utilisée sur noelshack en premier
+       reorderExtensions(currentImageUrl) {
+            const extensions = ['.jpg', '.png', '.jpeg'];
+            const currentExtension = getImageExtension(currentImageUrl);
+            const newExtensions = [...extensions];
+
+            if (currentExtension) {
+                if (!newExtensions.includes(currentExtension)) {
+                    newExtensions.unshift(currentExtension);
+                } else {
+                    const index = newExtensions.indexOf(currentExtension);
+                    if (index > -1) {
+                        newExtensions.splice(index, 1);
+                        newExtensions.unshift(currentExtension);
+                    }
+                }
+            }
+            return newExtensions; // Retourne la liste réorganisée
         }
 
         // Change d'image en fonction de la direction (suivant/précédent)
@@ -662,14 +829,30 @@
             this.changeImage(1);
         }
 
-        // Ferme le visualiseur d'images
-        closeViewer() {
-          if (this.overlay) {
-                document.body.removeChild(this.overlay);
-                this.overlay = null;
-                ImageViewer.instance = null; // Réinitialise l'instance singleton
-            }
-        }
+      // Met à jour le focus sur la miniature correspondante
+      focusOnThumbnail() {
+          // Obtenez la miniature actuelle
+          const thumbnails = this.thumbnailPanel ? this.thumbnailPanel.querySelectorAll('img') : [];
+          const currentThumbnail = thumbnails[this.currentIndex];
+
+          // Réinitialiser la bordure de la miniature précédente si elle existe
+          if (this.previousThumbnail) {
+              this.previousThumbnail.style.border = 'none';
+              this.previousThumbnail.style.transform = 'scale(1)';
+            this.previousThumbnail.style.boxShadow = 'none';
+          }
+
+          // Mettre à jour la bordure de la miniature actuelle
+          if (currentThumbnail) {
+              //currentThumbnail.style.border = '2px solid rgba(40, 40, 40, 0.8)'; // Appliquer la bordure
+              currentThumbnail.style.boxShadow = '0 0 0 2px rgba(40, 40, 40, 0.8), 0 0 10px rgba(40, 40, 40, 0.5)'; // Ombre portée
+              currentThumbnail.style.transform = 'scale(1.15)'; // Agrandir l'élément
+              currentThumbnail.parentElement.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+          }
+
+          // Mettre à jour la référence de la miniature précédente
+          this.previousThumbnail = currentThumbnail;
+      }
 
       // Désactive ou active les boutons suivant/précédent en fonction de l'index actuel
       toggleButtonState() {
@@ -694,20 +877,254 @@
           }
       }
 
+      // Cacher temporairement le menu JVC
+      toggleMenuVisibility(isVisible) {
+          const menu = document.querySelector('.header__bottom');
+          if (menu) {
+              menu.style.display = isVisible ? '' : 'none';
+          }
+      }
+
+      // Fonction pour créer et afficher le panneau des miniatures
+      toggleThumbnailPanel() {
+          if (this.thumbnailPanel) {
+              this.closeThumbnailPanel(); // Ferme le panneau si déjà ouvert
+              return;
+          }
+
+          // Créer le panneau
+          this.thumbnailPanel = this.createElement('div', {
+              position: 'fixed',
+              bottom: '10px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              border: '0px solid',
+              padding: '0px',
+              zIndex: '99999999',
+              maxHeight: '80px',
+              maxWidth: '80%',
+              overflowY: 'hidden',
+              overflowX: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: 'transparent',
+          });
+          this.thumbnailPanel.classList.add('thumbnail-scroll-container');
+
+          // Conteneur pour le défilement horizontal
+          const scrollContainer = this.createElement('div', {
+              display: 'flex',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+              maxWidth: '100%',
+          });
+
+          // Ajout des images au conteneur
+          this.images.forEach((image, index) => {
+              const imgContainer = this.createElement('div', {
+                  display: 'inline-block',
+                  width: '50px',
+                  height: '50px',
+                  margin: '5px',
+                  padding: '4px',
+                  transition: 'transform 0.3s',
+              });
+
+              const imgElement = this.createElement('img');
+              imgElement.src = image.querySelector('img') ? image.querySelector('img').src : image.href || image.thumbnail;
+
+              imgElement.alt = `Image ${index + 1}`;
+              imgElement.style.width = 'auto';
+              imgElement.style.height = '100%';
+              imgElement.style.objectFit = 'cover';
+              imgElement.style.cursor = 'pointer';
+
+              imgElement.addEventListener('click', () => {
+                  this.images.forEach((_, i) => {
+                      const container = scrollContainer.children[i];
+                      container.querySelector('img').style.border = 'none';
+                  });
+                  //imgElement.style.border = '2px solid blue';
+                  this.currentIndex = index;
+                  this.updateImage();
+                  //imgContainer.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+              });
+
+              imgContainer.appendChild(imgElement);
+              scrollContainer.appendChild(imgContainer);
+          });
+
+          this.thumbnailPanel.appendChild(scrollContainer);
+          this.overlay.appendChild(this.thumbnailPanel);
+
+          this.focusOnThumbnail();
+      }
+
+
+      // Ecouteurs d'événements pour réinitialiser le timer
+      addInteractionListeners() {
+          this.overlay.addEventListener('mousemove', this.resetHideButtons.bind(this));
+          this.overlay.addEventListener('click', this.resetHideButtons.bind(this));
+          this.overlay.addEventListener('touchstart', this.resetHideButtons.bind(this));
+      }
+
+      // Réinitialisez le timer pour cacher les boutons
+      resetHideButtons() {
+        if (this.hideButtonsTimeout) {
+            clearTimeout(this.hideButtonsTimeout);
+        }
+        this.toggleButtonsVisibility(true);
+        this.hideButtonsTimeout = setTimeout(() => {
+            this.toggleButtonsVisibility(false); // Cachez les boutons après 3 secondes
+        }, 2500);
+    }
+
+      // Changez la visibilité des boutons
+      toggleButtonsVisibility(visible) {
+          const displayValue = visible ? 'flex' : 'none';
+
+          const elements = [
+              this.prevButton,
+              this.nextButton,
+              this.thumbnailPanel,
+              this.infoText,
+              this.downloadButton
+          ];
+
+          elements.forEach(element => {
+              if (element) {
+                  element.style.display = displayValue;
+              }
+          });
+      }
+
+    startDownload() {
+        this.downloadButton.classList.add('downloading'); // Ajout de la classe pour l'animation
+
+        this.downloadCurrentImage().then(() => {
+            // Retirer la classe après le téléchargement
+            this.downloadButton.classList.remove('downloading');
+        }).catch((error) => {
+            console.error('Download failed:', error);
+            this.downloadButton.classList.remove('downloading');
+        });
+    }
+
+    downloadCurrentImage() {
+        return new Promise((resolve, reject) => {
+            const imageElement = this.imgElement;
+            if (!imageElement) {
+                console.error('Image not found!');
+                reject('Image not found');
+                return;
+            }
+
+            const imageUrl = imageElement.src;
+            const fileNameWithExtension = imageUrl.split('/').pop();
+            const fileName = fileNameWithExtension.substring(0, fileNameWithExtension.lastIndexOf('.'));
+
+            // Utilisation de GM.xmlHttpRequest pour contourner CORS
+            GM.xmlHttpRequest({
+                method: "GET",
+                url: imageUrl,
+                responseType: "blob",
+                headers: {
+                    'Accept': 'image/jpeg,image/png,image/gif,image/bmp,image/tiff,image/*;q=0.8'
+                },
+                onload: function(response) {
+                    if (response.status === 200) {
+                        const blob = response.response;
+                        const url = URL.createObjectURL(blob);
+
+                        // Téléchargement du fichier
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                        resolve(); // Indique que le téléchargement est terminé
+                    } else {
+                        reject('Error downloading image: ' + response.statusText);
+                    }
+                },
+                onerror: function(err) {
+                    reject('Request failed: ' + err);
+                }
+            });
+        });
+    }
+
+      // Fonction pour fermer le panneau des miniatures
+      closeThumbnailPanel(thumbnailPanel) {
+              if (this.thumbnailPanel && this.overlay.contains(this.thumbnailPanel)) {
+                  this.overlay.removeChild(this.thumbnailPanel);
+                  this.thumbnailPanel = null;
+              }
+      }
+
+      closeViewer() {
+          if (this.overlay) {
+              this.handleCloseViewer(); // Ferme le visualiseur
+              history.back(); // Supprime l'état ajouté par pushState
+          }
+      }
+
+
+      // Ferme le visualiseur d'images
+      handleCloseViewer() {
+          if (this.overlay) {
+                document.body.removeChild(this.overlay);
+
+                // Ferme le panneau des miniatures si ouvert
+                if (this.thumbnailPanel) {
+                    this.closeThumbnailPanel(this.thumbnailPanel);
+                }
+
+                window.removeEventListener('popstate', this.handlePopState);
+
+                this.overlay = null;
+                this.isViewerOpen = false;
+                ImageViewer.instance = null; // Réinitialise l'instance singleton
+
+                this.toggleMenuVisibility(true);
+            }
+      }
+
       openViewer(images, currentIndex) {
             if (this.overlay) {
                 this.images = images;
                 this.currentIndex = currentIndex;
                 this.updateImage();
-                //this.overlay.style.display = 'flex';
+                this.toggleThumbnailPanel();
             } else {
                 new ImageViewer();
                 this.images = images;
                 this.currentIndex = currentIndex;
                 this.createOverlay();
                 this.updateImage();
-                //this.overlay.style.display = 'flex';
+                this.toggleThumbnailPanel();
             }
+            this.isViewerOpen = true;
+
+            this.addHistoryState()
+            window.addEventListener('popstate', this.handlePopState); // Ecouter l'événement bouton back du navigateur
+
+            this.toggleMenuVisibility(false);
+        }
+
+        handlePopState(event) {
+          if (ImageViewer.instance) {
+                event.preventDefault();
+                this.handleCloseViewer();
+          }
+        }
+
+        // Ajouter une entrée dans l'historique
+        addHistoryState() {
+          history.pushState({ viewerOpen: true }, '');
         }
     }
 
@@ -718,19 +1135,92 @@
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
-            .spinner { /* Exemple de classe pour spinner */
+            .spinner {
                 width: 50px;
                 height: 50px;
-                border: 5px solid rgba(0, 0, 0, 0.1);
-                border-left-color: #000;
                 border-radius: 50%;
+                border: 5px solid transparent;
+                border-top: 5px solid rgba(0, 0, 0, 0.1);
+                background: conic-gradient(from 0deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0));
                 animation: spin 1s linear infinite;
             }
         `;
         document.head.appendChild(style);
     }
 
-    const parentClasses = '.txt-msg, .message, .conteneur-message.mb-3, .bloc-editor-forum, .signature-msg';
+    function addDownloadButtonStyles() {
+      const style = document.createElement('style');
+      style.textContent = `
+          /* Animation de rotation */
+          @keyframes rotate {
+              0% {
+                  transform: rotate(0deg);
+              }
+              100% {
+                  transform: rotate(360deg);
+              }
+          }
+
+          /* Classe active lors du téléchargement */
+          .downloading {
+              animation: rotate 1s linear infinite; /* Rotation continue */
+              background-color: rgba(0, 0, 0, 0.8); /* Change légèrement le fond */
+              border-color: rgba(255, 255, 255, 0.5); /* Bordure plus marquée */
+              opacity: 0.7; /* Légère transparence pour indiquer une action */
+          }
+      `;
+      document.head.appendChild(style); // Ajout de la balise style dans le <head> du document
+    }
+
+    function addScrollBarStyles() {
+      // Créer une feuille de style pour personnaliser la scrollbar
+      const style = document.createElement('style');
+          style.textContent = `
+          .thumbnail-scroll-container::-webkit-scrollbar {
+              height: 6px;
+          }
+
+          .thumbnail-scroll-container::-webkit-scrollbar-track {
+              background: transparent;
+          }
+
+          /* Barre de défilement (thumb) légèrement plus visible */
+          .thumbnail-scroll-container::-webkit-scrollbar-thumb {
+              background-color: rgba(255, 255, 255, 0.15);
+              border-radius: 10px;
+              border: 2px solid transparent;
+              background-clip: padding-box;
+          }
+
+          .thumbnail-scroll-container::-webkit-scrollbar-thumb:hover {
+              background-color: rgba(255, 255, 255, 0.25);
+              transition: background-color 0.3s ease;
+          }
+
+          .thumbnail-scroll-container::-webkit-scrollbar-thumb:active {
+              background-color: rgba(255, 255, 255, 0.35);
+          }
+
+          .thumbnail-scroll-container {
+              scrollbar-width: thin;
+              scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+          }
+
+          .thumbnail-scroll-container:hover {
+              scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+          }
+      `;
+      // Ajouter le style au document
+      document.head.appendChild(style);
+    }
+
+    function injectStyles(){
+      addSpinnerStyles();
+      addScrollBarStyles();
+      addDownloadButtonStyles();
+    }
+
+    const parentClasses = '.txt-msg, .message, .conteneur-message.mb-3, .bloc-editor-forum, .signature-msg, .previsu-editor';
     const linkSelectors = parentClasses.split(', ').map(cls => `${cls} a`);
 
     // Ajouter des écouteurs d'événements aux images sur la page
@@ -762,21 +1252,41 @@
         }
     }
 
-
     function isMobile() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
 
+    function getImageExtension(url) {
+        const match = url.match(/\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/i); // Regexp pour matcher les extensions d'images
+        return match ? match[0].toLowerCase() : null;
+    }
 
-    function main() {
-        addSpinnerStyles();
-        addListeners();
-
+    // Observer les changements dans le DOM
+    function observeDOMChanges() {
         const observer = new MutationObserver(() => addListeners());
         observer.observe(document, { childList: true, subtree: true });
     }
 
-    main();
+    // Détection des changements d'URL
+    function observeURLChanges() {
+        let lastUrl = window.location.href;
 
+        const urlObserver = new MutationObserver(() => {
+            if (lastUrl !== window.location.href) {
+                lastUrl = window.location.href;
+                addListeners();
+            }
+        });
+        urlObserver.observe(document, { subtree: true, childList: true });
+    }
+
+    function main() {
+        injectStyles();
+        addListeners();
+        observeDOMChanges();
+        observeURLChanges();
+    }
+
+    main();
 
 })();
