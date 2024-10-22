@@ -1,0 +1,16 @@
+{
+  "name": "monkeyscripts",
+  "version": "1.0.0",
+  "description": "**JVC ImageViewer**\r  - Go to https://greasyfork.org/fr/scripts/508447-jvc-imageviewer\r  - Click on \"Install\"",
+  "main": "test.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^9.13.0",
+    "puppeteer": "^23.6.0"
+  }
+}
