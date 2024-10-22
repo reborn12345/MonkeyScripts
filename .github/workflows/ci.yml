@@ -25,7 +25,7 @@ jobs:
       run: npm ci
 
     - name: Run ESLint
-      run: npx eslint path/to/your/script.js
+      run: npx eslint JavaScript/JVCImageViewer.js
 
   test:
     runs-on: ubuntu-latest
