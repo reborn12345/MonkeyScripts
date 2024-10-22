@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JVC_ImageViewer
 // @namespace    http://tampermonkey.net/
-// @version      1.41.10
+// @version      1.42.1
 // @description  Naviguer entre les images d'un post sous forme de slideshow en cliquant sur une image sans ouvrir NoelShack.
 // @author       HulkDu92
 // @match        https://*.jeuxvideo.com/forums/*
@@ -35,6 +35,7 @@
             this.closeButton = null;
             this.infoText = null;
             this.downloadButton = null;
+            this.searchButton = null;
             this.indicatorsContainer = null;
             this.indicators = [];
             this.zoomLevel = 1;
@@ -87,6 +88,8 @@
                 justifyContent: 'center',
                 zIndex: 10000
             });
+            this.overlay.classList.add('jvc-image-viewer');
+
 
             this.imgElement = this.createElement('img', {
                 maxWidth: '90%',
@@ -95,6 +98,7 @@
                 transition: 'opacity 0.3s',
                 opacity: 0,
                 cursor: 'pointer',
+                overflow: 'auto',
             });
 
             this.spinner = this.createSpinner();
@@ -103,6 +107,7 @@
             this.closeButton = this.createCloseButton();
             this.infoText = this.createInfoText();
             this.downloadButton = this.createDownloadButton();
+            this.searchButton = this.createSearchButton();
 
             this.indicatorsContainer = this.createElement('div', {
                 display: 'flex',
@@ -125,7 +130,8 @@
                 this.imgElement,
                 this.spinner,
                 this.infoText,
-                this.downloadButton,  // Ajout du bouton de téléchargement
+                this.downloadButton,
+                // this.searchButton,
                 this.prevButton,
                 this.nextButton,
                 this.closeButton
@@ -183,13 +189,58 @@
           return button;
       }
 
-      createDownloadButton() {
+    createDownloadButton() {
+        const isMobileDevice = isMobile();
+
+        const button = this.createElement('button', {
+            position: 'absolute',
+            top: '80px',
+            left: '15px',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            color: 'white',
+            fontSize: isMobileDevice ? '12px' : '10px',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '50%',
+            padding: '0',
+            cursor: 'pointer',
+            zIndex: 10001,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: isMobileDevice ? '37px' : '45px',
+            height: isMobileDevice ? '37px' : '45px',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+            transition: 'transform 0.3s ease, background-color 0.3s ease',
+        });
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', isMobileDevice ? '18' : '22');
+        svg.setAttribute('height', isMobileDevice ? '18' : '22');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('stroke-width', '2');
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M6 21h12M12 3v14m0 0l5-5m-5 5l-5-5');
+
+        svg.appendChild(path);
+        button.appendChild(svg);
+        this.addButtonEffects(button);
+
+        return button;
+    }
+
+      createSearchButton() {
           const isMobileDevice = isMobile();
 
           const button = this.createElement('button', {
               position: 'absolute',
-              top: '120px',
-              left: '15px',
+              top: '80px',
+              left: '65px',
               backgroundColor: 'rgba(0, 0, 0, 0.6)',
               color: 'white',
               fontSize: isMobileDevice ? '12px' : '10px',
@@ -207,31 +258,26 @@
               transition: 'transform 0.3s ease, background-color 0.3s ease',
           });
 
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('width', isMobileDevice ? '22' : '26');
-            svg.setAttribute('height', isMobileDevice ? '22' : '26');
-            svg.setAttribute('fill', 'white');
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          svg.setAttribute('width', isMobileDevice ? '18' : '22');
+          svg.setAttribute('height', isMobileDevice ? '18' : '22');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('fill', 'currentColor');
 
-            // Nouvelle flèche épurée vers le bas
-            const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            arrowPath.setAttribute('d', 'M12 16l-4-4h3V4h2v8h3l-4 4z');
-            svg.appendChild(arrowPath);
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('fill', 'currentColor');
+          path.setAttribute('d', 'M6 2h12a4 4 0 0 1 4 4v6h-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6v2H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4m6 6a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m6 8a2 2 0 0 1 2 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2a2 2 0 0 1 2-2Z');
 
-            // Barre horizontale plus discrète représentant le disque dur
-            const diskPath = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            diskPath.setAttribute('x', '8');
-            diskPath.setAttribute('y', '18');
-            diskPath.setAttribute('width', '8');
-            diskPath.setAttribute('height', '2');
-            svg.appendChild(diskPath);
+          svg.appendChild(path);
+          button.appendChild(svg);
 
-            button.appendChild(svg);
-            this.addButtonEffects(button);
+          button.addEventListener('click', () => this.searchImageOnGoogle());
 
-            return button;
+          this.addButtonEffects(button);
+
+          return button;
       }
-
 
         // Crée le bouton de fermeture
         createCloseButton() {
@@ -263,8 +309,10 @@
         createInfoText() {
             return this.createElement('div', {
                 position: 'absolute',
-                top: '80px',
-                left: '15px',
+                //top: '80px',
+                bottom: '0px',
+                //left: '15px',
+                right: '10px',
                 color: 'white',
                 fontSize: '12px',
                 backgroundColor: 'rgba(5, 5, 5, 0.5)',
@@ -378,7 +426,6 @@
                           this.startDrag(event);
                       } else {
                           // Sinon, démarrer le swipe
-                          console.log("swipe start");
                           this.handleSwipeStart(event);
                       }
                   } else if (event.touches.length === 2) {
@@ -393,7 +440,6 @@
                           // Si l'image est zoomée, permettre le déplacement (drag)
                           this.onDrag(event);
                       } else {
-                          console.log("swipe move");
                           this.handleSwipeMove(event);
                       }
                   } else if (event.touches.length === 2) {
@@ -550,114 +596,147 @@
             return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         }
 
+
         handleZoom(event) {
             event.preventDefault();
-            const zoomIncrement = 0.07;
+            const zoomIncrement = 0.07; // Sensibilité du zoom
 
-            /*if (event.deltaY < 0) {
-                this.imageElementScale += zoomIncrement; // Zoomer
-            } else {
-                this.imageElementScale = Math.max(1, this.zoomLevel - zoomIncrement); // Dézoomer, mais ne pas descendre sous 1
-            }*/
+            let previousZoomLevel = this.imageElementScale;
+
+            // Calcul du nouveau niveau de zoom
             if (event.deltaY < 0) {
-                this.imageElementScale = Math.min(4, this.imageElementScale + zoomIncrement); // Limite max
+                this.imageElementScale = Math.min(4, this.imageElementScale + zoomIncrement); // Zoom max
             } else {
-                this.imageElementScale = Math.max(1, this.imageElementScale - zoomIncrement); // Limite min
+                this.imageElementScale = Math.max(1, this.imageElementScale - zoomIncrement); // Zoom min
             }
 
-            this.imgElement.style.transform = `scale(${this.imageElementScale}) translate(${this.offsetX}px, ${this.offsetY}px)`;
+            // Calcul de la position relative du zoom pour recentrer autour du point de la molette
+            let imgRect = this.imgElement.getBoundingClientRect();
+            let offsetXRelative = (event.clientX - this.offsetX) / previousZoomLevel;
+            let offsetYRelative = (event.clientY - this.offsetY) / previousZoomLevel;
 
-            // Si le niveau de zoom est supérieur à 1, mettre l'image devant les boutons
-            if (this.zoomLevel > 1) {
-                this.imgElement.style.zIndex = 10002;
-            } else {
-                // Si le zoom revient à la normale, remettre le zIndex initial
-                this.imgElement.style.zIndex = '';
-            }
-        }
+            // Recalculer les offsets pour centrer l'image correctement après le zoom
+            this.offsetX = event.clientX - offsetXRelative * this.imageElementScale;
+            this.offsetY = event.clientY - offsetYRelative * this.imageElementScale;
 
+            // Appliquer les limites de déplacement après zoom
+            this.limitOffsets();
 
-        startDrag(event) {
-            event.preventDefault(); // Empêche la sélection de l'image
+            // Appliquer la transformation avec le zoom et les offsets
+            //this.imgElement.style.transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.imageElementScale})`;
 
-            // Gestion tactile
-            if (event.type === 'touchstart') {
-                this.isTouchDragging = true;
-                this.startX = event.touches[0].clientX; //- this.offsetX;
-                this.startY = event.touches[0].clientY; //- this.offsetY;
-            } else {
-                // Gestion avec la souris
-                this.isMouseDown = true;
-                this.startX = event.clientX; //- this.offsetX;
-                this.startY = event.clientY; // - this.offsetY;
-            }
+            // Ajuster le z-index si zoomé
+            this.applyTransform();
+      }
 
-            this.isDragging = true;
-            this.imgElement.style.cursor = 'grabbing';
-            this.imgElement.style.userSelect = 'none';
+      applyTransform() {
+          this.imgElement.style.transition = 'transform 0.1s ease'; // Ajout d'une transition fluide
+          this.imgElement.style.transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.imageElementScale})`;
 
-            // Ajouter des listeners sur le document pour capturer les mouvements
-            if (event.touches) {
-                document.addEventListener('touchmove', this.onDragBound = this.onDrag.bind(this));
-                document.addEventListener('touchend', this.endDragBound = this.endDrag.bind(this));
-            } else {
-                document.addEventListener('mousemove', this.onDragBound = this.onDrag.bind(this));
-                document.addEventListener('mouseup', this.endDragBound = this.endDrag.bind(this));
-            }
-        }
+          // Ajuster le z-index si zoomé
+          this.imgElement.style.zIndex = this.imageElementScale > 1 ? 10002 : '';
+      }
 
+      limitOffsets() {
+          let imgRect = this.imgElement.getBoundingClientRect();
+          let windowWidth = window.innerWidth;
+          let windowHeight = window.innerHeight;
 
-        onDrag(event) {
-            if (!this.isDragging) return;
+          // Calculer les limites maximales
+          let maxOffsetX = Math.max(0, (imgRect.width * this.imageElementScale) - windowWidth);
+          let maxOffsetY = Math.max(0, (imgRect.height * this.imageElementScale) - windowHeight);
 
-            event.preventDefault();
+          // Limiter les déplacements
+          this.offsetX = Math.min(Math.max(this.offsetX, -maxOffsetX), 0);
+          this.offsetY = Math.min(Math.max(this.offsetY, -maxOffsetY), 0);
+      }
 
-            let deltaX, deltaY;
+      startDrag(event) {
+          event.preventDefault(); // Empêche la sélection de l'image
 
-            if (event.type === 'touchmove') {
-                // Gestion tactile
-                deltaX = (event.touches[0].clientX - this.startX) * this.touchSensitivityFactor;
-                deltaY = (event.touches[0].clientY - this.startY) * this.touchSensitivityFactor;
-            } else {
-                // Gestion avec la souris
-                deltaX = (event.clientX - this.startX) * this.mouseSensitivityFactor;
-                deltaY = (event.clientY - this.startY) * this.mouseSensitivityFactor;
-            }
+          // Gestion tactile
+          if (event.type === 'touchstart') {
+              this.isTouchDragging = true;
+              this.startX = event.touches[0].clientX;
+              this.startY = event.touches[0].clientY;
+          } else {
+              // Gestion avec la souris
+              this.isMouseDown = true;
+              this.startX = event.clientX;
+              this.startY = event.clientY;
+          }
 
-            // Appliquer la translation ajustée par le facteur de sensibilité
-            this.offsetX += deltaX;
-            this.offsetY += deltaY;
+          this.isDragging = true;
+          this.imgElement.style.cursor = 'grabbing';
+          this.imgElement.style.userSelect = 'none';
 
-              // Mettre à jour les points de départ pour le prochain déplacement
-            this.startX = event.type === 'touchmove' ? event.touches[0].clientX : event.clientX;
-            this.startY = event.type === 'touchmove' ? event.touches[0].clientY : event.clientY;
+          // Ajouter des listeners sur le document pour capturer les mouvements
+          if (event.touches) {
+              document.addEventListener('touchmove', this.onDragBound = this.onDrag.bind(this));
+              document.addEventListener('touchend', this.endDragBound = this.endDrag.bind(this));
+          } else {
+              document.addEventListener('mousemove', this.onDragBound = this.onDrag.bind(this));
+              document.addEventListener('mouseup', this.endDragBound = this.endDrag.bind(this));
+          }
+      }
 
-            // Appliquer la transformation avec le zoom actuel, en se déplaçant dans l'image
-            this.imgElement.style.transform =  `scale(${this.imageElementScale}) translate(${this.offsetX}px, ${this.offsetY}px)`;
-        }
+      onDrag(event) {
+          if (!this.isDragging) return;
 
+          event.preventDefault();
 
-        endDrag(event) {
-            this.imgElement.style.cursor = 'grab';
+          let deltaX, deltaY;
+          if (event.type === 'touchmove') {
+              // Gestion tactile
+              deltaX = (event.touches[0].clientX - this.startX) * this.touchSensitivityFactor;
+              deltaY = (event.touches[0].clientY - this.startY) * this.touchSensitivityFactor;
+          } else {
+              // Gestion avec la souris
+              deltaX = (event.clientX - this.startX) * this.mouseSensitivityFactor;
+              deltaY = (event.clientY - this.startY) * this.mouseSensitivityFactor;
+          }
 
-            // Retirer les listeners
-            if (event.type === 'touchend') {
-                this.isTouchDragging = false; // Réinitialise l'état tactile
-                document.removeEventListener('touchmove', this.onDragBound);
-                document.removeEventListener('touchend', this.endDragBound);
-            } else {
-                this.isMouseDown = false; // Réinitialise l'état de la souris
-                document.removeEventListener('mousemove', this.onDragBound);
-                document.removeEventListener('mouseup', this.endDragBound);
-            }
+          // Calculer les nouveaux offsets
+          let newOffsetX = this.offsetX + deltaX;
+          let newOffsetY = this.offsetY + deltaY;
 
-            // Ajouter un délai pour réinitialiser le drag (empeche les conflits avec le clic)
-            this.dragTimeout = setTimeout(() => {
-                this.isDragging = false;
-                this.imgElement.style.cursor = 'pointer';
-                this.dragTimeout = null;
-            }, 100);
-        }
+          // Limiter les nouveaux offsets
+          this.offsetX = Math.min(Math.max(newOffsetX, -this.imgElement.width * (this.imageElementScale - 1)), 0);
+          this.offsetY = Math.min(Math.max(newOffsetY, -this.imgElement.height * (this.imageElementScale - 1)), 0);
+
+          // Appliquer la translation ajustée par le facteur de sensibilité
+          this.offsetX += deltaX;
+          this.offsetY += deltaY;
+
+          // Appliquer la transformation avec le zoom et la translation
+          this.applyTransform();
+
+          // Mettre à jour les points de départ pour le prochain déplacement
+          this.startX = event.type === 'touchmove' ? event.touches[0].clientX : event.clientX;
+          this.startY = event.type === 'touchmove' ? event.touches[0].clientY : event.clientY;
+      }
+
+      endDrag(event) {
+          this.imgElement.style.cursor = 'grab';
+
+          // Retirer les listeners
+          if (event.type === 'touchend') {
+              this.isTouchDragging = false; // Réinitialise l'état tactile
+              document.removeEventListener('touchmove', this.onDragBound);
+              document.removeEventListener('touchend', this.endDragBound);
+          } else {
+              this.isMouseDown = false; // Réinitialise l'état de la souris
+              document.removeEventListener('mousemove', this.onDragBound);
+              document.removeEventListener('mouseup', this.endDragBound);
+          }
+
+          // Réinitialiser le drag après un délai pour éviter les conflits
+          this.dragTimeout = setTimeout(() => {
+              this.isDragging = false;
+              this.imgElement.style.cursor = 'pointer';
+              this.dragTimeout = null;
+          }, 100);
+      }
 
 
         handleMouseDown(event) {
@@ -705,6 +784,7 @@
             this.imgElement.style.left = '0px';
             this.imgElement.style.top = '0px';
         }
+
 
         // Met à jour l'image affichée dans le visualiseur
         updateImage() {
@@ -768,18 +848,29 @@
                 if (index >= extensions.length) {
                     // Si toutes les extensions échouent, tenter l'URL originale (mini)
                     this.imgElement.src = miniUrl;
+                    const imgTestMini = new Image();
+                    imgTestMini.src = miniUrl;
+
+                    imgTestMini.onload = () => {
+                        this.imgElement.src = miniUrl;
+                    };
+                    imgTestMini.onerror = () => {
+                        this.setImageNotFound(this.imgElement);
+                        //const notFoundImageUrl = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg"
+                        // Si même l'URL originale échoue, afficher l'image par défaut
+                        //this.imgElement.src = notFoundImageUrl;
+                    };
                     return;
                 }
 
                 // Remplacer l'extension et mettre à jour l'URL
-                const updatedUrl = baseUrl.replace(/\.(jpg|png|jpeg)$/, extensions[index]);
+                const updatedUrl = baseUrl.replace(/\.(jpg|png|jpeg|webp|gif)$/, extensions[index]);
 
                 // Tester l'URL avec un élément Image temporaire
                 const imgTest = new Image();
                 imgTest.src = updatedUrl;
 
                 imgTest.onload = () => {
-                    // Si l'image se charge avec succès, l'assigner à l'élément d'image principal
                     this.imgElement.src = updatedUrl;
                 };
 
@@ -791,6 +882,11 @@
 
             // Commencer les essais avec la première extension
             tryNextExtension(0);
+        }
+
+       setImageNotFound(imageElement) {
+            const notFoundImageUrl = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+            imageElement.src = notFoundImageUrl;
         }
 
         // Réarranger la liste des extensions a tester pour mettre l'extension utilisée sur noelshack en premier
@@ -810,7 +906,7 @@
                     }
                 }
             }
-            return newExtensions; // Retourne la liste réorganisée
+            return newExtensions;
         }
 
         // Change d'image en fonction de la direction (suivant/précédent)
@@ -919,6 +1015,9 @@
               maxWidth: '100%',
           });
 
+          scrollContainer.classList.add('thumbnail-scroll-container');
+
+
           // Ajout des images au conteneur
           this.images.forEach((image, index) => {
               const imgContainer = this.createElement('div', {
@@ -932,6 +1031,9 @@
 
               const imgElement = this.createElement('img');
               imgElement.src = image.querySelector('img') ? image.querySelector('img').src : image.href || image.thumbnail;
+              imgElement.onerror = () => {
+                  this.setImageNotFound(imgElement);
+              };
 
               imgElement.alt = `Image ${index + 1}`;
               imgElement.style.width = 'auto';
@@ -988,7 +1090,8 @@
               this.nextButton,
               this.thumbnailPanel,
               this.infoText,
-              this.downloadButton
+              this.downloadButton,
+              this.searchButton,
           ];
 
           elements.forEach(element => {
@@ -1055,6 +1158,17 @@
                 }
             });
         });
+    }
+
+    searchImageOnGoogle() {
+        if (this.images.length > 0) {
+            const imageUrl = this.imgElement.src;
+            const googleImageSearchUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+            // Ouvrir le lien dans un nouvel onglet
+            window.open(googleImageSearchUrl, '_blank');
+        } else {
+            console.error('Aucune image disponible pour la recherche.');
+        }
     }
 
       // Fonction pour fermer le panneau des miniatures
@@ -1172,56 +1286,63 @@
       document.head.appendChild(style); // Ajout de la balise style dans le <head> du document
     }
 
-    function addScrollBarStyles() {
-      // Créer une feuille de style pour personnaliser la scrollbar
+   function addScrollBarStyles() {
       const style = document.createElement('style');
-          style.textContent = `
+      style.textContent = `
           .thumbnail-scroll-container::-webkit-scrollbar {
-              height: 6px;
+              //height: thin;
+              height: 7px;
+              background-color: transparent;
           }
 
-          .thumbnail-scroll-container::-webkit-scrollbar-track {
-              background: transparent;
+          .thumbnail-scroll-container::-webkit-scrollbar-button {
+              display: none; /* Pas de boutons */
           }
 
-          /* Barre de défilement (thumb) légèrement plus visible */
+          /* Coin de la scrollbar */
+          .thumbnail-scroll-container::-webkit-scrollbar-corner {
+              background-color: transparent;
+          }
+
+          /* Thumb (la barre de défilement visible) */
           .thumbnail-scroll-container::-webkit-scrollbar-thumb {
-              background-color: rgba(255, 255, 255, 0.15);
-              border-radius: 10px;
+              background-color: rgba(74, 77, 82, 0.7);
               border: 2px solid transparent;
-              background-clip: padding-box;
+              border-radius: 10px;
           }
 
+          /* Thumb au survol (hover) */
           .thumbnail-scroll-container::-webkit-scrollbar-thumb:hover {
-              background-color: rgba(255, 255, 255, 0.25);
-              transition: background-color 0.3s ease;
-          }
-
-          .thumbnail-scroll-container::-webkit-scrollbar-thumb:active {
-              background-color: rgba(255, 255, 255, 0.35);
-          }
-
-          .thumbnail-scroll-container {
-              scrollbar-width: thin;
-              scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-          }
-
-          .thumbnail-scroll-container:hover {
-              scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+              background-color: rgb(90, 93, 98, 0.7);
           }
       `;
-      // Ajouter le style au document
+
       document.head.appendChild(style);
-    }
+  }
 
     function injectStyles(){
+      const isMobileDevice = isMobile();
+
       addSpinnerStyles();
-      addScrollBarStyles();
       addDownloadButtonStyles();
+
+      if (!isMobileDevice) {
+        addScrollBarStyles();
+      }
     }
 
-    const parentClasses = '.txt-msg, .message, .conteneur-message.mb-3, .bloc-editor-forum, .signature-msg, .previsu-editor';
-    const linkSelectors = parentClasses.split(', ').map(cls => `${cls} a`);
+    const parentClasses = `
+        .txt-msg,
+        .message,
+        .conteneur-message.mb-3,
+        .bloc-editor-forum,
+        .signature-msg,
+        .previsu-editor,
+        .bloc-description-desc.txt-enrichi-desc-profil,
+        .bloc-signature-desc.txt-enrichi-desc-profil
+    `.replace(/\s+/g, ''); // Supprimer les sauts de ligne et espaces inutiles
+
+    const linkSelectors = parentClasses.split(',').map(cls => `${cls} a`);
 
     // Ajouter des écouteurs d'événements aux images sur la page
     function addListeners() {
